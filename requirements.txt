@@ -1,3 +1,4 @@
-iqoptionapi
 pandas
 python-dotenv
+requests
+websocket-client
