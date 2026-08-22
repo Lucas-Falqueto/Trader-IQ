@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.env
+*.log
+resultados/live/
+resultados/backtests/
+.gemini/
