@@ -7,10 +7,9 @@ import sys
 ATIVOS_PARA_RODAR = [
     "EURUSD-OTC", 
     "SP35-OTC", 
-    "US100-OTC", 
-    "XAUUSD-OTC", 
-    "CHFNOK-OTC",
-    "JP225-OTC"
+    "JP225-OTC",
+    "AUDJPY-OTC",
+    "DOLLARINDEX"
 ]
 
 def iniciar_robos():

@@ -5,3 +5,4 @@ __pycache__/
 resultados/live/
 resultados/backtests/
 .gemini/
+.agents/
