@@ -20,7 +20,7 @@ echo Pressione CTRL+C a qualquer momento para desligar os robos.
 echo.
 
 :: Inicia o gerenciador de processos
-python run_limit.py
+python bots\run_limit.py
 
 echo.
 pause
