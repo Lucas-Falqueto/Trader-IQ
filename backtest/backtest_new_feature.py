@@ -1,12 +1,13 @@
 import sys
 import os
 import pandas as pd
-from config import IQ_EMAIL, IQ_PASSWORD
-from data import conectar, buscar_candles_historico
+from core.config import IQ_EMAIL, IQ_PASSWORD
+from core.data import conectar, buscar_candles_historico
 
 # Importa a arquitetura pura
 from price_limit_strategy.models import Candle
 from price_limit_strategy.signal_engine import run
+from price_limit_strategy.candle_utils import calcular_tamanho_medio
 
 def rodar_teste_mercado_real(ativo: str, dias: int = 10):
     print(f"============================================================")
@@ -18,6 +19,7 @@ def rodar_teste_mercado_real(ativo: str, dias: int = 10):
     try:
         api = conectar(IQ_EMAIL, IQ_PASSWORD)
         df_m1 = buscar_candles_historico(api, ativo, 60, dias * 24 * 60)
+        df_m15 = buscar_candles_historico(api, ativo, 900, int(dias * 24 * 4))
     except Exception as e:
         print(f"Erro ao baixar dados: {e}")
         return
@@ -28,9 +30,19 @@ def rodar_teste_mercado_real(ativo: str, dias: int = 10):
         print("Nenhuma vela encontrada para o ativo.")
         return
 
-    # Calcular SMA 100 e SMA 20
+    # Calcular SMA 100 e SMA 20 no M1
     df_m1["sma"] = df_m1["close"].rolling(window=100).mean().fillna(0)
     df_m1["sma20"] = df_m1["close"].rolling(window=20).mean().fillna(0)
+    
+    # Calcular SMA 10 no M15
+    df_m15["sma10"] = df_m15["close"].rolling(window=10).mean().fillna(0)
+    
+    # Mapear tendência do M15 para os timestamps de M1
+    # Vamos usar merge_asof para preencher o M1 com a última SMA10 do M15
+    df_m15_sorted = df_m15[['ts', 'close', 'sma10']].sort_values('ts').rename(columns={'close': 'close_m15'})
+    df_m1_sorted = df_m1.sort_values('ts')
+    
+    df_m1 = pd.merge_asof(df_m1_sorted, df_m15_sorted, on='ts', direction='backward')
     
     # Calcular RSI 14 (Wilder's Smoothing / EWM)
     delta = df_m1["close"].diff()
@@ -68,36 +80,95 @@ def rodar_teste_mercado_real(ativo: str, dias: int = 10):
             
             # FILTRO 1: HORÁRIO DA MORTE (Lista Negra: Desligado nas zonas de alta matança)
             hora = datetime.fromtimestamp(vela_gatilho.timestamp).hour
-            if hora in [0, 10, 15, 13, 23, 4, 20]:
+            # Filtro 1: Horário (Desligado das 23h às 07h)
+            if hora >= 23 or hora < 7:
                 filtrados_por_horario += 1
                 continue
                 
+            # FILTRO 3: TENDÊNCIA MACRO (M15)
+            # Verifica a direção do M15 naquele instante (usando o row do dataframe original)
+            # Para isso, precisamos acessar a linha original correspondente em df_m1
+            row_original = df_m1.iloc[idx]
+            close_m15 = float(row_original.get("close_m15", 0))
+            sma_m15 = float(row_original.get("sma10", 0))
+            
+            macro_bearish = close_m15 < sma_m15 and sma_m15 > 0
+            macro_bullish = close_m15 > sma_m15 and sma_m15 > 0
+            
+            if s.direcao == "CALL" and macro_bearish:
+                filtrados_por_indicador += 1
+                continue
+            
+            if s.direcao == "PUT" and macro_bullish:
+                filtrados_por_indicador += 1
+                continue
+                
+            # FILTRO 4 e 5: VOLATILIDADE E ATR (Recomendações da IA)
+            # Calcula o ATR local das últimas 10 velas antes do gatilho
+            atr = calcular_tamanho_medio(candles_puros[:idx], lookback=10)
+            if atr == 0:
+                atr = 0.00001
+                
+            # Filtro 4: Elástico Estourado (> 6.5x ATR) ou Zona de Ruído (< 1.0x ATR)
+            distancia_sma = abs(vela_gatilho.close - vela_gatilho.sma)
+            if (distancia_sma / atr) > 6.5 or (distancia_sma / atr) < 1.0:
+                filtrados_por_indicador += 1
+                continue
+                
+            # Filtro 5: Canal Anormalmente Largo (> 4.0x ATR)
+            tamanho_canal = 0.0
+            if "Canal" in s.descricao:
+                try:
+                    coords = s.descricao.split("Canal ")[1].replace(")", "").split("-")
+                    tamanho_canal = abs(float(coords[0]) - float(coords[1]))
+                except:
+                    pass
+            if tamanho_canal > 0 and (tamanho_canal / atr) > 4.0:
+                filtrados_por_indicador += 1
+                continue
+
             # FILTRO 2: ACELERAÇÃO (2 velas contrárias consecutivas) + SMA/RSI
             idx = s.candle_idx
+            passou_indicador = False
+            
             if s.direcao == "CALL":
                 if vela_gatilho.close > vela_gatilho.sma and vela_gatilho.rsi < 80:
+                    passou_indicador = True
                     # Bloquear se 2 velas anteriores são bearish (aceleração contra a CALL)
                     if idx >= 2:
                         c1 = candles_puros[idx - 1]
                         c2 = candles_puros[idx - 2]
                         if c1.is_bearish and c2.is_bearish:
-                            filtrados_por_indicador += 1
-                            continue
-                    alta_confianca.append(s)
-                else:
-                    filtrados_por_indicador += 1
+                            passou_indicador = False
             else:
                 if vela_gatilho.close < vela_gatilho.sma and vela_gatilho.rsi > 20:
+                    passou_indicador = True
                     # Bloquear se 2 velas anteriores são bullish (aceleração contra o PUT)
                     if idx >= 2:
                         c1 = candles_puros[idx - 1]
                         c2 = candles_puros[idx - 2]
                         if c1.is_bullish and c2.is_bullish:
-                            filtrados_por_indicador += 1
-                            continue
-                    alta_confianca.append(s)
-                else:
-                    filtrados_por_indicador += 1
+                            passou_indicador = False
+                            
+            # --- FILTROS DE MACHINE LEARNING (XGBoost) ---
+            if passou_indicador and idx >= 1:
+                vela_anterior = candles_puros[idx - 1]
+                tam_ant = vela_anterior.high - vela_anterior.low
+                corpo_pct_ant = abs(vela_anterior.close - vela_anterior.open) / tam_ant if tam_ant > 0 else 0
+                
+                if corpo_pct_ant <= 0.01:
+                    passou_indicador = False  # ML Anti-Doji
+                
+                tam_gatilho = vela_gatilho.high - vela_gatilho.low
+                corpo_pct_gatilho = abs(vela_gatilho.close - vela_gatilho.open) / tam_gatilho if tam_gatilho > 0 else 0
+                
+                if corpo_pct_gatilho > 0.90:
+                    passou_indicador = False  # ML Faca Caindo
+            
+            if passou_indicador:
+                alta_confianca.append(s)
+            else:
+                filtrados_por_indicador += 1
                     
     baixa_confianca = [s for s in sinais_gerados if not s.alta_confianca]
     
@@ -262,9 +333,11 @@ def rodar_teste_mercado_real(ativo: str, dias: int = 10):
     for s in sinais_loss_fatal:
         if s.tipo == "retracao":
             gatilho = candles_puros[s.candle_idx]
-            g0 = candles_puros[s.candle_idx + 1]
-            g1 = candles_puros[s.candle_idx + 2]
-            g2 = candles_puros[s.candle_idx + 3]
+            
+            # Safe boundary check
+            g0 = candles_puros[s.candle_idx + 1] if s.candle_idx + 1 < len(candles_puros) else gatilho
+            g1 = candles_puros[s.candle_idx + 2] if s.candle_idx + 2 < len(candles_puros) else gatilho
+            g2 = candles_puros[s.candle_idx + 3] if s.candle_idx + 3 < len(candles_puros) else gatilho
             
             doji = (g0.open == g0.close) or (g1.open == g1.close) or (g2.open == g2.close)
             trator = False
@@ -288,7 +361,11 @@ def rodar_teste_mercado_real(ativo: str, dias: int = 10):
             except:
                 canal_size = 0.0
                 
-            print(f"  [Loss Retração] {s.direcao} às {hora_loss}h | Canal: {canal_size:.5f} | Aceleração: {acel} velas contra")
+            print(f"  [Loss Retração] {s.direcao} às {datetime.fromtimestamp(gatilho.timestamp).hour}h | Canal: {canal_size:.5f}")
+            
+            # Só tenta acessar G0 se existir vela no array
+            if s.candle_idx + 1 < len(candles_puros):
+                g0 = candles_puros[s.candle_idx + 1]
     
     # Análise global de aceleração nos Wins
     wins_acel = []

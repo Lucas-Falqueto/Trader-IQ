@@ -1,5 +1,5 @@
 import pandas as pd
-from config import MINIMUM_WICK_RATIO
+from core.config import MINIMUM_WICK_RATIO
 
 def analisar_candle(vela: pd.Series) -> dict:
     """

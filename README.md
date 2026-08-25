@@ -45,21 +45,21 @@ Você **não** deve instalar a `iqoptionapi` usando `pip install`. O código já
 ### Backtest Isolado
 Para rodar simulações estatísticas no passado para qualquer par (busca os últimos 30 dias):
 ```bash
-python backtest.py
+python backtest/backtest.py
 ```
 *(Os resultados serão salvos em `/resultados/backtests/`)*
 
 ### Robô Ao Vivo (Bot Individual)
 Para rodar o bot no mercado em tempo real lendo as variáveis do `.env`:
 ```bash
-python main.py
+python bots/main.py
 ```
 
 ### Portfólio Simultâneo (Multi-Moedas)
 Para rodar dezenas de robôs simultâneos operando todas as moedas da lista `ATIVOS_PARA_RODAR`:
-1. Edite os pares desejados dentro do arquivo `run_all.py` (Linha 7).
+1. Edite os pares desejados dentro do arquivo `bots/run_all.py` (Linha 7).
 2. Dê dois cliques em `iniciar_robos.bat` ou execute:
 ```bash
-python run_all.py
+python bots/run_all.py
 ```
 *(Os logs individuais ficarão registrados no console e os trades finais aparecerão na pasta `/resultados/live/`)*

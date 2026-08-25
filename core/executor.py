@@ -1,7 +1,7 @@
 import logging
 import concurrent.futures
 from iqoptionapi.stable_api import IQ_Option
-from config import ATIVO, DURACAO_OPCAO, PAYOUT_MINIMO
+from core.config import ATIVO, DURACAO_OPCAO, PAYOUT_MINIMO
 
 logger = logging.getLogger(__name__)
 

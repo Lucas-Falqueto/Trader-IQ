@@ -1,7 +1,7 @@
 from iqoptionapi.stable_api import IQ_Option
 import pandas as pd
 import time
-from config import ACCOUNT_TYPE
+from core.config import ACCOUNT_TYPE
 
 
 def conectar(email: str, senha: str) -> IQ_Option:

@@ -1,6 +1,6 @@
-from signal import analisar_candle, detectar_engolfo
-from config import BREAKOUT_THRESHOLD, PULLBACK_TOLERANCE, MINIMUM_SCORE, TIMEOUT_VELAS_M1, VELAS_SR
-from levels import marcar_niveis
+from legacy.signal_legacy import analisar_candle, detectar_engolfo
+from core.config import BREAKOUT_THRESHOLD, PULLBACK_TOLERANCE, MINIMUM_SCORE, TIMEOUT_VELAS_M1, VELAS_SR
+from core.levels import marcar_niveis
 
 # Estados
 WAITING = "WAITING"

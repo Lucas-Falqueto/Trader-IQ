@@ -5,6 +5,9 @@ Modos:
   python main.py           → modo live (PRACTICE), executa ordens na conta demo
   python main.py --dry-run → modo simulação, não envia nenhuma ordem
 """
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 import time
 import logging
@@ -12,11 +15,11 @@ import argparse
 import csv
 import os
 from datetime import datetime
-from data import conectar, buscar_candles
-from levels import marcar_niveis
-from engine import novo_estado, processar_vela
-from executor import executar_ordem
-from config import (
+from core.data import conectar, buscar_candles
+from core.levels import marcar_niveis
+from core.engine import novo_estado, processar_vela
+from core.executor import executar_ordem
+from core.config import (
     IQ_EMAIL, IQ_PASSWORD, ATIVO,
     MAX_PERDAS_SEGUIDAS, STOP_LOSS_DIARIO, META_DIARIA, VALOR_ENTRADA, PAYOUT_MINIMO,
     USAR_GALE, MAX_GALES, FATOR_GALE, VELAS_SR

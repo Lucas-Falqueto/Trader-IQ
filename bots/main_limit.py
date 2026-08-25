@@ -1,3 +1,5 @@
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import time
 import logging
 import argparse
@@ -5,9 +7,10 @@ import csv
 import os
 import pandas as pd
 from datetime import datetime
-from data import conectar, buscar_candles
-from executor import executar_ordem
-from config import (
+from core.data import conectar, buscar_candles
+from core.executor import executar_ordem
+from price_limit_strategy.candle_utils import calcular_tamanho_medio
+from core.config import (
     IQ_EMAIL, IQ_PASSWORD, ATIVO,
     MAX_PERDAS_SEGUIDAS, STOP_LOSS_DIARIO, META_DIARIA, VALOR_ENTRADA, PAYOUT_MINIMO,
     USAR_GALE, MAX_GALES, FATOR_GALE
@@ -96,6 +99,7 @@ def main(dry_run: bool):
         try:
             # Busca 150 velas para garantir histórico suficiente para SMA 100 e Lotes
             df_m1 = buscar_candles(api, ATIVO, 60, 150) 
+            df_m15 = buscar_candles(api, ATIVO, 900, 20)
         except Exception as e:
             logger.error(f"Erro ao buscar candles: {e}")
             aguardar_proximo_minuto()
@@ -134,34 +138,99 @@ def main(dry_run: bool):
         vela_gatilho = candles[ultimo_idx]
         hora = datetime.fromtimestamp(vela_gatilho.timestamp).hour
 
+        # Avaliar Tendência Macro M15
+        macro_bearish = False
+        macro_bullish = False
+        if not df_m15.empty:
+            df_m15["sma10"] = df_m15["close"].rolling(window=10).mean().fillna(0)
+            vela_m15 = df_m15.iloc[-2] # Penúltima fechada (ou a última em formação)
+            close_m15 = float(vela_m15["close"])
+            sma_m15 = float(vela_m15["sma10"])
+            if sma_m15 > 0:
+                if close_m15 < sma_m15:
+                    macro_bearish = True
+                elif close_m15 > sma_m15:
+                    macro_bullish = True
+
         passou_indicador = False
         is_supernova = False
+        motivo_bloqueio = "SMA/RSI"
 
-        if sinal_valido.direcao == "CALL":
-            if vela_gatilho.close > vela_gatilho.sma and vela_gatilho.rsi < 80:
-                passou_indicador = True
-                # Filtro de Aceleração: 2 velas fortes contrárias = sem espaço para a operação
-                if ultimo_idx >= 2:
-                    c1 = candles[ultimo_idx - 1]
-                    c2 = candles[ultimo_idx - 2]
-                    if c1.is_bearish and c2.is_bearish:
-                        passou_indicador = False
+        # Calcular ATR (Últimas 10 velas fechadas)
+        atr = calcular_tamanho_medio(candles[:ultimo_idx], lookback=10)
+        if atr == 0:
+            atr = 0.00001
+            
+        distancia_sma = abs(vela_gatilho.close - vela_gatilho.sma)
+        
+        tamanho_canal = 0.0
+        if sinal_valido and "Canal" in sinal_valido.descricao:
+            try:
+                coords = sinal_valido.descricao.split("Canal ")[1].replace(")", "").split("-")
+                tamanho_canal = abs(float(coords[0]) - float(coords[1]))
+            except:
+                pass
+
+        if sinal_valido.direcao == "CALL" and macro_bearish:
+            motivo_bloqueio = "TENDÊNCIA MACRO BAIXA (M15)"
+            passou_indicador = False
+        elif sinal_valido.direcao == "PUT" and macro_bullish:
+            motivo_bloqueio = "TENDÊNCIA MACRO ALTA (M15)"
+            passou_indicador = False
+        elif (distancia_sma / atr) > 6.5:
+            motivo_bloqueio = "ELÁSTICO ESTOURADO (>6.5x ATR)"
+            passou_indicador = False
+        elif (distancia_sma / atr) < 1.0:
+            motivo_bloqueio = "ZONA DE RUÍDO (<1.0x ATR da SMA)"
+            passou_indicador = False
+        elif tamanho_canal > 0 and (tamanho_canal / atr) > 4.0:
+            motivo_bloqueio = "CANAL MUITO LARGO (>4.0x ATR)"
+            passou_indicador = False
+        else:
+            if sinal_valido.direcao == "CALL":
+                if vela_gatilho.close > vela_gatilho.sma and vela_gatilho.rsi < 80:
+                    passou_indicador = True
+                    if ultimo_idx >= 2:
+                        c1 = candles[ultimo_idx - 1]
+                        c2 = candles[ultimo_idx - 2]
+                        if c1.is_bearish and c2.is_bearish:
+                            passou_indicador = False
+                            motivo_bloqueio = "ACELERAÇÃO DE VELAS CONTRA"
                 if passou_indicador and vela_gatilho.rsi >= 65:
                     is_supernova = True
-        else:
-            if vela_gatilho.close < vela_gatilho.sma and vela_gatilho.rsi > 20:
-                passou_indicador = True
-                # Filtro de Aceleração: 2 velas fortes contrárias = sem espaço para a operação
-                if ultimo_idx >= 2:
-                    c1 = candles[ultimo_idx - 1]
-                    c2 = candles[ultimo_idx - 2]
-                    if c1.is_bullish and c2.is_bullish:
-                        passou_indicador = False
+            else:
+                if vela_gatilho.close < vela_gatilho.sma and vela_gatilho.rsi > 20:
+                    passou_indicador = True
+                    if ultimo_idx >= 2:
+                        c1 = candles[ultimo_idx - 1]
+                        c2 = candles[ultimo_idx - 2]
+                        if c1.is_bullish and c2.is_bullish:
+                            passou_indicador = False
+                            motivo_bloqueio = "ACELERAÇÃO DE VELAS CONTRA"
                 if passou_indicador and vela_gatilho.rsi <= 35:
                     is_supernova = True
 
+        # --- FILTROS DE MACHINE LEARNING (XGBoost) ---
+        if passou_indicador and ultimo_idx >= 1:
+            vela_anterior = candles[ultimo_idx - 1]
+            tam_ant = vela_anterior.high - vela_anterior.low
+            corpo_pct_ant = abs(vela_anterior.close - vela_anterior.open) / tam_ant if tam_ant > 0 else 0
+            
+            # Filtro 1: Anti-Doji (Se a vela anterior foi uma indecisão severa < 1% de corpo)
+            if corpo_pct_ant <= 0.01:
+                passou_indicador = False
+                motivo_bloqueio = "ML Anti-Doji (Vela -1 Indecisa)"
+            
+            # Filtro 2: Faca Caindo (Se a vela gatilho não deixou nenhum pavio de rejeição)
+            tam_gatilho = vela_gatilho.high - vela_gatilho.low
+            corpo_pct_gatilho = abs(vela_gatilho.close - vela_gatilho.open) / tam_gatilho if tam_gatilho > 0 else 0
+            
+            if corpo_pct_gatilho > 0.90:
+                passou_indicador = False
+                motivo_bloqueio = f"ML Faca Caindo (Corpo {corpo_pct_gatilho:.0%})"
+
         if not passou_indicador:
-            logger.info(f"SINAL BLOQUEADO (SMA/RSI) -> {sinal_valido.direcao} | RSI: {vela_gatilho.rsi:.1f}")
+            logger.info(f"SINAL BLOQUEADO ({motivo_bloqueio}) -> {sinal_valido.direcao} | RSI: {vela_gatilho.rsi:.1f}")
             aguardar_proximo_minuto()
             continue
 

@@ -1,8 +1,8 @@
 import logging
 import time
-from data import conectar
-from executor import executar_ordem
-from config import IQ_EMAIL, IQ_PASSWORD, ATIVO, VALOR_ENTRADA
+from core.data import conectar
+from core.executor import executar_ordem
+from core.config import IQ_EMAIL, IQ_PASSWORD, ATIVO, VALOR_ENTRADA
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

@@ -13,9 +13,9 @@ import pandas as pd
 import os
 from datetime import datetime, timezone, timedelta
 import logging
-from data import conectar, buscar_candles_historico
-from engine import novo_estado, processar_vela
-from config import (
+from core.data import conectar, buscar_candles_historico
+from core.engine import novo_estado, processar_vela
+from core.config import (
     IQ_EMAIL, IQ_PASSWORD, ATIVO, VALOR_ENTRADA, PAYOUT_MINIMO,
     DIAS_BACKTEST, VELAS_SR, USAR_GALE, MAX_GALES, FATOR_GALE
 )

@@ -2,9 +2,9 @@ import os
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import logging
-from data import conectar, buscar_candles_historico
-from engine import novo_estado, processar_vela
-from config import IQ_EMAIL, IQ_PASSWORD, VELAS_SR
+from core.data import conectar, buscar_candles_historico
+from core.engine import novo_estado, processar_vela
+from core.config import IQ_EMAIL, IQ_PASSWORD, VELAS_SR
 from run_all import ATIVOS_PARA_RODAR
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")

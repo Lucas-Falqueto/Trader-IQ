@@ -1,7 +1,7 @@
 import time
 import logging
-from data import conectar
-from config import IQ_EMAIL, IQ_PASSWORD
+from core.data import conectar
+from core.config import IQ_EMAIL, IQ_PASSWORD
 
 logging.basicConfig(level=logging.INFO)
 

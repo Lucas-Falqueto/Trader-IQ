@@ -1,5 +1,5 @@
 import pandas as pd
-from config import VELAS_SR
+from core.config import VELAS_SR
 
 
 def marcar_niveis(df_m15: pd.DataFrame) -> dict:
