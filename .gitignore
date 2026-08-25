@@ -2,7 +2,6 @@
 __pycache__/
 .env
 *.log
-resultados/live/
-resultados/backtests/
+resultados/
 .gemini/
 .agents/
