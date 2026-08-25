@@ -43,17 +43,26 @@ def processar_limite_tipo1(candles: List[Candle], lotes: List[Lote]) -> List[Pri
                     vela_continuacao = candle
                     # PDF: O canal de referência é a faixa entre o pavio da vela de rompimento e o pavio da vela de continuação.
                     if lote.direction == "CALL":
-                        topo_canal = max(vela_rompimento.high, vela_continuacao.high)
-                        fundo_canal = min(vela_rompimento.high, vela_continuacao.high)
-                    else:
                         topo_canal = max(vela_rompimento.low, vela_continuacao.low)
                         fundo_canal = min(vela_rompimento.low, vela_continuacao.low)
-                        
+                    else:
+                        topo_canal = max(vela_rompimento.high, vela_continuacao.high)
+                        fundo_canal = min(vela_rompimento.high, vela_continuacao.high)
+
+                    # Filtro: canal com tamanho < 20% do ATR local é ruído puro — descartar
+                    from .candle_utils import calcular_tamanho_medio
+                    tamanho_canal = topo_canal - fundo_canal
+                    atr_local = calcular_tamanho_medio(candles[:i], lookback=10)
+                    if atr_local > 0 and tamanho_canal < atr_local * 0.20:
+                        estado = "FALHOU"
+                        break
+
                     canal = ReferenceChannel(top=topo_canal, bottom=fundo_canal, start_idx=i)
                     estado = "AGUARDANDO_PRIMEIRA_LIQUIDEZ"
                 else:
                     estado = "FALHOU"
                 continue
+
                 
             if estado in ["AGUARDANDO_PRIMEIRA_LIQUIDEZ", "LIMITE_ATIVO", "AGUARDANDO_REVERSAO"]:
                 # Timeout de Pullback: 15 velas de vida para o canal
@@ -104,6 +113,8 @@ def processar_limite_tipo1(candles: List[Candle], lotes: List[Lote]) -> List[Pri
                 
                 # Se o status acabou de virar AGUARDANDO_REVERSAO ou já era, checamos o toque no corpo.
                 # Nota: Não usamos elif aqui para que ele possa processar o toque no mesmo candle que furou o canal.
+                # NOTA: interpretação de "não deixar liquidez" = tocou E furou o canal no mesmo candle.
+                # É uma leitura razoável do PDF, mas não é regra explícita — validar por backtest.
                 if estado == "AGUARDANDO_REVERSAO":
                     if (lote.direction == "CALL" and candle.low <= lote.top) or (lote.direction == "PUT" and candle.high >= lote.bottom):
                         # Tocou no corpo do Lote original!

@@ -1,6 +1,9 @@
 from typing import List, Optional
 from .models import Candle, Lote
 
+# TODO: primeiro_registro_novo_preco ainda é um mock (reusa primeiro_registro_reversao).
+# Falta implementar a regra real do PDF: pavio na vela de comando + pavio na 1ª vela após final de taxa.
+
 def primeiro_registro_reversao(candles: List[Candle]) -> List[int]:
     """
     Identifica os índices das velas de reversão (mudança de cor) 

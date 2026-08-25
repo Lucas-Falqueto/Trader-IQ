@@ -2,7 +2,7 @@ from typing import List, Optional
 from .models import Candle, Lote
 from .candle_utils import calcular_tamanho_medio, eh_vela_relevante, tem_pavio_rejeicao_abertura
 
-def detectar_lotes(candles: List[Candle]) -> List[Lote]:
+def detectar_lotes(candles: List[Candle], atr_lookback: int = 10, proporcao_minima: float = 0.5) -> List[Lote]:
     """
     Varre a lista de candles e retorna todos os Lotes encontrados.
     Um lote inicia com uma vela de comando (movimento direcional) e termina quando a cor muda.
@@ -16,14 +16,15 @@ def detectar_lotes(candles: List[Candle]) -> List[Lote]:
         mudou_cor = (candle.is_bullish != candle_ant.is_bullish)
         
         if mudou_cor:
-            # É a origem de um movimento.
-            # Regra do PDF: "a primeira vela dessa base deixa um pavio logo na sua abertura"
+            atr = calcular_tamanho_medio(candles[:i], lookback=atr_lookback)
+            # Sem histórico suficiente ainda: não filtra, evita descartar primeiros candles do dataset.
+            if atr > 0 and not eh_vela_relevante(candle, atr, proporcao_minima):
+                continue
+
             if tem_pavio_rejeicao_abertura(candle):
                 direcao = "CALL" if candle.is_bullish else "PUT"
                 pavio_abertura = candle.low if candle.is_bullish else candle.high
                 
-                # O Lote é travado IMEDIATAMENTE como essa vela base de origem.
-                # Seus limites são os limites do corpo (topo e fundo do corpo).
                 lote = Lote(
                     start_idx=i, 
                     end_idx=i, 

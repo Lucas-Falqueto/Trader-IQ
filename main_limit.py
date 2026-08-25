@@ -133,29 +133,33 @@ def main(dry_run: bool):
         # Filtros de horário e indicadores
         vela_gatilho = candles[ultimo_idx]
         hora = datetime.fromtimestamp(vela_gatilho.timestamp).hour
-        
+
         passou_indicador = False
         is_supernova = False
 
         if sinal_valido.direcao == "CALL":
             if vela_gatilho.close > vela_gatilho.sma and vela_gatilho.rsi < 80:
                 passou_indicador = True
-                # Regra Supernova: RSI forte e sem 2 velas contrárias seguidas na prévia
-                if vela_gatilho.rsi >= 65 and ultimo_idx >= 2:
+                # Filtro de Aceleração: 2 velas fortes contrárias = sem espaço para a operação
+                if ultimo_idx >= 2:
                     c1 = candles[ultimo_idx - 1]
                     c2 = candles[ultimo_idx - 2]
-                    if not (c1.is_bearish and c2.is_bearish):
-                        is_supernova = True
+                    if c1.is_bearish and c2.is_bearish:
+                        passou_indicador = False
+                if passou_indicador and vela_gatilho.rsi >= 65:
+                    is_supernova = True
         else:
             if vela_gatilho.close < vela_gatilho.sma and vela_gatilho.rsi > 20:
                 passou_indicador = True
-                # Regra Supernova: RSI forte e sem 2 velas contrárias seguidas na prévia
-                if vela_gatilho.rsi <= 35 and ultimo_idx >= 2:
+                # Filtro de Aceleração: 2 velas fortes contrárias = sem espaço para a operação
+                if ultimo_idx >= 2:
                     c1 = candles[ultimo_idx - 1]
                     c2 = candles[ultimo_idx - 2]
-                    if not (c1.is_bullish and c2.is_bullish):
-                        is_supernova = True
-                
+                    if c1.is_bullish and c2.is_bullish:
+                        passou_indicador = False
+                if passou_indicador and vela_gatilho.rsi <= 35:
+                    is_supernova = True
+
         if not passou_indicador:
             logger.info(f"SINAL BLOQUEADO (SMA/RSI) -> {sinal_valido.direcao} | RSI: {vela_gatilho.rsi:.1f}")
             aguardar_proximo_minuto()

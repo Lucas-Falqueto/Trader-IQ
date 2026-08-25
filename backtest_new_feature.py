@@ -72,16 +72,29 @@ def rodar_teste_mercado_real(ativo: str, dias: int = 10):
                 filtrados_por_horario += 1
                 continue
                 
-            # FILTRO 2: INDICADORES TÉCNICOS
+            # FILTRO 2: ACELERAÇÃO (2 velas contrárias consecutivas) + SMA/RSI
+            idx = s.candle_idx
             if s.direcao == "CALL":
-                # CALL: O preço deve estar acima da SMA 100, e RSI menor que 80
                 if vela_gatilho.close > vela_gatilho.sma and vela_gatilho.rsi < 80:
+                    # Bloquear se 2 velas anteriores são bearish (aceleração contra a CALL)
+                    if idx >= 2:
+                        c1 = candles_puros[idx - 1]
+                        c2 = candles_puros[idx - 2]
+                        if c1.is_bearish and c2.is_bearish:
+                            filtrados_por_indicador += 1
+                            continue
                     alta_confianca.append(s)
                 else:
                     filtrados_por_indicador += 1
             else:
-                # PUT: O preço deve estar abaixo da SMA 100, e RSI maior que 20
                 if vela_gatilho.close < vela_gatilho.sma and vela_gatilho.rsi > 20:
+                    # Bloquear se 2 velas anteriores são bullish (aceleração contra o PUT)
+                    if idx >= 2:
+                        c1 = candles_puros[idx - 1]
+                        c2 = candles_puros[idx - 2]
+                        if c1.is_bullish and c2.is_bullish:
+                            filtrados_por_indicador += 1
+                            continue
                     alta_confianca.append(s)
                 else:
                     filtrados_por_indicador += 1
