@@ -10,8 +10,10 @@ ATIVOS_PARA_RODAR = [
     "EURUSD-OTC", 
     "SP35-OTC", 
     "JP225-OTC",
-    "AUDJPY-OTC",
-    "DOLLARINDEX"
+    "JP225",
+    "UK100",
+    "US100",
+    "US500",
 ]
 
 def iniciar_robos():
